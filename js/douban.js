@@ -1,5 +1,63 @@
 // 豆瓣热门电影电视剧推荐功能
 
+// =================== 图片缓存系统 ===================
+// 使用 localStorage 缓存已搜索的图片URL，加快加载速度
+const DOUBAN_IMAGE_CACHE_KEY = 'doubanImageCache';
+const DOUBAN_CACHE_MAX_SIZE = 500; // 最多缓存500条记录
+const DOUBAN_CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000; // 7天过期
+
+function initImageCache() {
+    try {
+        const cache = localStorage.getItem(DOUBAN_IMAGE_CACHE_KEY);
+        if (!cache) {
+            localStorage.setItem(DOUBAN_IMAGE_CACHE_KEY, JSON.stringify({}));
+        }
+    } catch (e) {
+        console.warn('初始化图片缓存失败:', e);
+    }
+}
+
+function getCachedImage(title) {
+    try {
+        const cache = JSON.parse(localStorage.getItem(DOUBAN_IMAGE_CACHE_KEY) || '{}');
+        const cached = cache[title];
+        if (cached && cached.timestamp > Date.now() - DOUBAN_CACHE_EXPIRY) {
+            return cached.url;
+        }
+        // 清理过期数据
+        if (cached) {
+            delete cache[title];
+            localStorage.setItem(DOUBAN_IMAGE_CACHE_KEY, JSON.stringify(cache));
+        }
+    } catch (e) {
+        console.warn('读取缓存失败:', e);
+    }
+    return null;
+}
+
+function setCachedImage(title, url) {
+    try {
+        const cache = JSON.parse(localStorage.getItem(DOUBAN_IMAGE_CACHE_KEY) || '{}');
+        
+        // 防止缓存过大，移除旧的条目
+        const cacheSize = Object.keys(cache).length;
+        if (cacheSize >= DOUBAN_CACHE_MAX_SIZE) {
+            const oldestKey = Object.keys(cache).reduce((oldest, key) => {
+                return cache[key].timestamp < cache[oldest].timestamp ? key : oldest;
+            });
+            delete cache[oldestKey];
+        }
+        
+        cache[title] = {
+            url: url,
+            timestamp: Date.now()
+        };
+        localStorage.setItem(DOUBAN_IMAGE_CACHE_KEY, JSON.stringify(cache));
+    } catch (e) {
+        console.warn('保存缓存失败:', e);
+    }
+}
+
 // 豆瓣标签列表 - 修改为默认标签
 let defaultMovieTags = ['热门', '最新', '经典', '豆瓣高分', '冷门佳片', '华语', '欧美', '韩国', '日本', '动作', '喜剧', '日综', '爱情', '科幻', '悬疑', '恐怖', '治愈'];
 let defaultTvTags = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧', '港剧', '日本动画', '综艺', '纪录片'];
@@ -55,6 +113,9 @@ const doubanPageSize = 16; // 一次显示的项目数量
 
 // 初始化豆瓣功能
 function initDouban() {
+    // 初始化图片缓存系统
+    initImageCache();
+    
     // 设置豆瓣开关的初始状态
     const doubanToggle = document.getElementById('doubanToggle');
     if (doubanToggle) {
@@ -409,6 +470,12 @@ function fetchDoubanTags() {
 // 根据标题搜索获取第一个结果的图片
 async function getImageFromSearch(title) {
     try {
+        // 优先检查缓存
+        const cachedUrl = getCachedImage(title);
+        if (cachedUrl) {
+            return cachedUrl;
+        }
+
         // 获取已选中的API
         const builtInApiCheckboxes = document.querySelectorAll('#apiCheckboxes input:checked');
         const selectedApis = Array.from(builtInApiCheckboxes).map(input => input.dataset.api);
@@ -421,14 +488,31 @@ async function getImageFromSearch(title) {
             }
         }
         
-        // 尝试每个已选API进行搜索
+        // 尝试每个已选API进行搜索，添加超时控制
         for (const apiId of selectedApis) {
-            const results = await searchByAPIAndKeyWord(apiId, title);
-            if (results.length > 0 && results[0].vod_pic) {
-                return results[0].vod_pic;
+            try {
+                // 为每个搜索请求添加3秒超时控制
+                const searchPromise = searchByAPIAndKeyWord(apiId, title);
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('search timeout')), 3000)
+                );
+                
+                const results = await Promise.race([searchPromise, timeoutPromise]);
+                if (results && results.length > 0 && results[0].vod_pic) {
+                    const imageUrl = results[0].vod_pic;
+                    // 缓存结果
+                    setCachedImage(title, imageUrl);
+                    return imageUrl;
+                }
+            } catch (error) {
+                // 该API超时或失败，继续尝试下一个
+                console.debug(`API ${apiId} 搜索超时或失败:`, title);
+                continue;
             }
         }
         
+        // 没有找到图片，缓存null以避免重复搜索
+        setCachedImage(title, null);
         return null;
     } catch (error) {
         console.error('搜索图片失败:', title, error);
@@ -543,6 +627,7 @@ async function fetchDoubanData(url) {
 }
 
 // 抽取渲染豆瓣卡片的逻辑到单独函数
+// 采用分批加载策略，先显示卡片框架，再异步加载图片
 async function renderDoubanCards(data, container) {
     // 创建文档片段以提高性能
     const fragment = document.createDocumentFragment();
@@ -555,95 +640,171 @@ async function renderDoubanCards(data, container) {
             <div class="text-pink-500">❌ 暂无数据，请尝试其他分类或刷新</div>
         `;
         fragment.appendChild(emptyEl);
-    } else {
-        // 并行搜索所有标题的图片
-        const searchPromises = data.subjects.map(item => 
-            getImageFromSearch(item.title)
-        );
-        const imageUrls = await Promise.all(searchPromises);
+        container.innerHTML = "";
+        container.appendChild(fragment);
+        return;
+    }
+    
+    // 快速创建卡片框架（不等待图片加载）
+    data.subjects.forEach((item, index) => {
+        const card = document.createElement("div");
+        card.className = "bg-[#111] hover:bg-[#222] transition-all duration-300 rounded-lg overflow-hidden flex flex-col transform hover:scale-105 shadow-md hover:shadow-lg";
+        card.id = `douban-card-${index}`;
         
-        // 循环创建每个影视卡片
-        data.subjects.forEach((item, index) => {
-            const card = document.createElement("div");
-            card.className = "bg-[#111] hover:bg-[#222] transition-all duration-300 rounded-lg overflow-hidden flex flex-col transform hover:scale-105 shadow-md hover:shadow-lg";
-            
-            // 生成卡片内容，确保安全显示（防止XSS）
-            const safeTitle = item.title
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-            
-            const safeRate = (item.rate || "暂无")
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;');
-            
-            // 获取搜索结果的图片或使用背景色
-            const imageUrl = imageUrls[index];
-            const bgColor = generateColorFromTitle(item.title);
-            
-            // 创建主要内容区域
-            let contentHtml = '';
-            if (imageUrl) {
-                // 有搜索结果图片，显示图片
-                contentHtml = `
-                    <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
-                        <img src="${imageUrl}" alt="${safeTitle}" 
-                            class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                            loading="lazy">
-                        <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
-                        <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
+        // 生成卡片内容，确保安全显示（防止XSS）
+        const safeTitle = item.title
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        
+        const safeRate = (item.rate || "暂无")
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        
+        const bgColor = generateColorFromTitle(item.title);
+        
+        // 初始显示使用背景色和加载指示
+        const contentHtml = `
+            <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer flex items-end justify-start p-3" 
+                 style="background: linear-gradient(135deg, ${bgColor} 0%, ${bgColor}dd 100%);"
+                 onclick="fillAndSearchWithDouban('${safeTitle}')"
+                 data-card-index="${index}">
+                <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80"></div>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <div class="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+                
+                <div class="relative z-10 w-full">
+                    <div class="text-white font-bold text-sm line-clamp-2 mb-2">${safeTitle}</div>
+                    <div class="flex justify-between items-end">
+                        <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm">
                             <span class="text-yellow-400">★</span> ${safeRate}
                         </div>
-                        <div class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm hover:bg-[#333] transition-colors">
+                        <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm hover:bg-pink-600 transition-colors">
                             <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
                                 🔗
                             </a>
                         </div>
                     </div>
-                `;
-            } else {
-                // 没有找到图片，使用背景色+标题
-                contentHtml = `
-                    <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer flex items-end justify-start p-3" 
-                         style="background: linear-gradient(135deg, ${bgColor} 0%, ${bgColor}dd 100%);"
-                         onclick="fillAndSearchWithDouban('${safeTitle}')">
-                        <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80"></div>
-                        
-                        <div class="relative z-10 w-full">
-                            <div class="text-white font-bold text-sm line-clamp-2 mb-2">${safeTitle}</div>
-                            <div class="flex justify-between items-end">
-                                <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm">
-                                    <span class="text-yellow-400">★</span> ${safeRate}
-                                </div>
-                                <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm hover:bg-pink-600 transition-colors">
-                                    <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
-                                        🔗
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            // 整合卡片内容
-            card.innerHTML = contentHtml + `
-                <div class="p-2 text-center bg-[#111]">
-                    <button onclick="fillAndSearchWithDouban('${safeTitle}')" 
-                            class="text-sm font-medium text-white truncate w-full hover:text-pink-400 transition"
-                            title="${safeTitle}">
-                        ${safeTitle}
-                    </button>
                 </div>
-            `;
-            
-            fragment.appendChild(card);
-        });
-    }
+            </div>
+        `;
+        
+        // 整合卡片内容
+        card.innerHTML = contentHtml + `
+            <div class="p-2 text-center bg-[#111]">
+                <button onclick="fillAndSearchWithDouban('${safeTitle}')" 
+                        class="text-sm font-medium text-white truncate w-full hover:text-pink-400 transition"
+                        title="${safeTitle}">
+                    ${safeTitle}
+                </button>
+            </div>
+        `;
+        
+        fragment.appendChild(card);
+    });
     
     // 清空并添加所有新元素
     container.innerHTML = "";
     container.appendChild(fragment);
+    
+    // 后台分批加载图片，更新卡片
+    loadDoubanImagesInBatches(data.subjects, container);
+}
+
+// 分批加载豆瓣图片，每批3个以平衡速度和网络负载
+async function loadDoubanImagesInBatches(subjects, container, batchSize = 3) {
+    const BATCH_DELAY = 100; // 批次间延迟100ms，避免突发并发太高
+    
+    for (let i = 0; i < subjects.length; i += batchSize) {
+        const batch = subjects.slice(i, i + batchSize);
+        
+        // 并行加载本批次的图片
+        await Promise.allSettled(
+            batch.map(async (item, batchIndex) => {
+                const globalIndex = i + batchIndex;
+                const imageUrl = await getImageFromSearch(item.title);
+                
+                // 更新对应的卡片
+                if (imageUrl) {
+                    updateDoubanCardWithImage(globalIndex, imageUrl, item);
+                }
+            })
+        );
+        
+        // 批次之间稍微延迟，避免过度并发
+        if (i + batchSize < subjects.length) {
+            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+        }
+    }
+}
+
+// 使用图片更新卡片内容
+function updateDoubanCardWithImage(index, imageUrl, item) {
+    const card = document.getElementById(`douban-card-${index}`);
+    if (!card) return;
+    
+    const safeTitle = item.title
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    
+    const safeRate = (item.rate || "暂无")
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    
+    // 更新卡片的图片部分
+    const imageHtml = `
+        <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
+            <img src="${imageUrl}" alt="${safeTitle}" 
+                class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                loading="lazy"
+                onerror="this.parentElement.style.display='none'; this.parentElement.nextElementSibling.style.display='flex';">
+            <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
+            <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
+                <span class="text-yellow-400">★</span> ${safeRate}
+            </div>
+            <div class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm hover:bg-[#333] transition-colors">
+                <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
+                    🔗
+                </a>
+            </div>
+        </div>
+    `;
+    
+    const bgColor = generateColorFromTitle(item.title);
+    const fallbackHtml = `
+        <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer flex items-end justify-start p-3" 
+             style="background: linear-gradient(135deg, ${bgColor} 0%, ${bgColor}dd 100%); display: none;"
+             onclick="fillAndSearchWithDouban('${safeTitle}')">
+            <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80"></div>
+            
+            <div class="relative z-10 w-full">
+                <div class="text-white font-bold text-sm line-clamp-2 mb-2">${safeTitle}</div>
+                <div class="flex justify-between items-end">
+                    <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm">
+                        <span class="text-yellow-400">★</span> ${safeRate}
+                    </div>
+                    <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm hover:bg-pink-600 transition-colors">
+                        <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
+                            🔗
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 只替换图片部分，保留下面的标题区域
+    card.innerHTML = imageHtml + fallbackHtml + `
+        <div class="p-2 text-center bg-[#111]">
+            <button onclick="fillAndSearchWithDouban('${safeTitle}')" 
+                    class="text-sm font-medium text-white truncate w-full hover:text-pink-400 transition"
+                    title="${safeTitle}">
+                ${safeTitle}
+            </button>
+        </div>
+    `;
 }
 
 // 重置到首页
