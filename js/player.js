@@ -1476,12 +1476,21 @@ function renderResourceInfoBar() {
         <span>${resourceName}</span>
         <span class="resource-info-bar-videos">${currentEpisodes.length} 个视频</span>
       </div>
-      <button class="resource-switch-btn flex" id="switchResourceBtn" onclick="showSwitchResourceModal()">
-        <span class="resource-switch-icon">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4v16m0 0l-6-6m6 6l6-6" stroke="#a67c2d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </span>
-        切换资源
-      </button>
+      <div class="flex gap-2">
+        <button class="speed-test-btn" id="quickSpeedTestBtn" onclick="performQuickSpeedTest()" title="快速测试当前资源速度">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline>
+            <polyline points="17 18 23 18 23 12"></polyline>
+          </svg>
+          测速
+        </button>
+        <button class="resource-switch-btn flex" id="switchResourceBtn" onclick="showSwitchResourceModal()">
+          <span class="resource-switch-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4v16m0 0l-6-6m6 6l6-6" stroke="#a67c2d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          切换资源
+        </button>
+      </div>
     `;
 }
 
@@ -1571,6 +1580,47 @@ async function testVideoSourceSpeed(sourceKey, vodId) {
     }
 }
 
+// 快速测速当前资源
+async function performQuickSpeedTest() {
+    const btn = document.getElementById('quickSpeedTestBtn');
+    if (!btn || btn.disabled) return;
+    
+    // 获取当前资源信息
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentSource = urlParams.get('source');
+    const currentId = urlParams.get('id');
+    
+    if (!currentSource || !currentId) {
+        showToast('无法获取当前视频信息', 'error');
+        return;
+    }
+    
+    // 禁用按钮并显示加载状态
+    btn.disabled = true;
+    btn.classList.add('testing');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>测速中...';
+    
+    try {
+        const result = await testVideoSourceSpeed(currentSource, currentId);
+        
+        if (result.speed === -1) {
+            showToast(`测速失败: ${result.error}`, 'error');
+        } else {
+            // 显示测速结果
+            const displayText = formatSpeedDisplay(result);
+            showToast(`✓ 当前资源速度: ${result.speed}ms`, 'success');
+        }
+    } catch (error) {
+        console.error('快速测速失败:', error);
+        showToast('测速异常，请重试', 'error');
+    } finally {
+        // 恢复按钮状态
+        btn.disabled = false;
+        btn.classList.remove('testing');
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>测速';
+    }
+}
+
 // 格式化速度显示
 function formatSpeedDisplay(speedResult) {
     if (speedResult.speed === -1) {
@@ -1580,17 +1630,22 @@ function formatSpeedDisplay(speedResult) {
     const speed = speedResult.speed;
     let className = 'speed-indicator good';
     let icon = '🟢';
+    let label = '快速';
     
-    if (speed > 2000) {
+    if (speed > 3000) {
         className = 'speed-indicator poor';
         icon = '🔴';
-    } else if (speed > 1000) {
+        label = '慢';
+    } else if (speed > 1500) {
         className = 'speed-indicator medium';
         icon = '🟡';
+        label = '中等';
     }
     
     const note = speedResult.note ? ` (${speedResult.note})` : '';
-    return `<span class="${className}">${icon} ${speed}ms${note}</span>`;
+    const episodes = speedResult.episodes ? ` • ${speedResult.episodes}集` : '';
+    
+    return `<span class="${className}">${icon} ${speed}ms ${label}${note}${episodes}</span>`;
 }
 
 async function showSwitchResourceModal() {
@@ -1603,7 +1658,12 @@ async function showSwitchResourceModal() {
     const modalContent = document.getElementById('modalContent');
 
     modalTitle.innerHTML = `<span class="break-words">${currentVideoTitle}</span>`;
-    modalContent.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;grid-column:1/-1;">正在加载资源列表...</div>';
+    modalContent.innerHTML = `
+      <div class="speed-test-progress">
+        <div class="spinner"></div>
+        <span>正在加载资源列表...</span>
+      </div>
+    `;
     modal.classList.remove('hidden');
 
     // 搜索
@@ -1634,7 +1694,12 @@ async function showSwitchResourceModal() {
     }));
 
     // 更新状态显示：开始速率测试
-    modalContent.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;grid-column:1/-1;">正在测试各资源速率...</div>';
+    modalContent.innerHTML = `
+      <div class="speed-test-progress">
+        <div class="spinner"></div>
+        <span>正在测试各资源速率，请稍候...</span>
+      </div>
+    `;
 
     // 同时测试所有资源的速率
     const speedResults = {};
@@ -1675,31 +1740,46 @@ async function showSwitchResourceModal() {
         const sourceName = resourceOptions.find(opt => opt.key === sourceKey)?.name || '未知资源';
         const speedResult = speedResults[sourceKey] || { speed: -1, error: '未测试' };
         
+        // 根据速度添加背景类
+        let speedClass = 'bg-gray-800';
+        if (speedResult.speed !== -1 && speedResult.speed < 1500) {
+            speedClass = 'bg-green-900 bg-opacity-20 border-green-700 border-opacity-30';
+        } else if (speedResult.speed !== -1 && speedResult.speed < 3000) {
+            speedClass = 'bg-yellow-900 bg-opacity-20 border-yellow-700 border-opacity-30';
+        } else if (speedResult.speed !== -1 && speedResult.speed >= 3000) {
+            speedClass = 'bg-red-900 bg-opacity-20 border-red-700 border-opacity-30';
+        }
+        
         html += `
-            <div class="relative group ${isCurrentSource ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105 transition-transform'}" 
+            <div class="resource-card relative group ${isCurrentSource ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}" 
                  ${!isCurrentSource ? `onclick="switchToResource('${sourceKey}', '${result.vod_id}')"` : ''}>
-                <div class="aspect-[2/3] rounded-lg overflow-hidden bg-gray-800 relative">
+                <div class="aspect-[2/3] rounded-lg overflow-hidden ${speedClass} relative border">
                     <img src="${result.vod_pic}" 
                          alt="${result.vod_name}"
-                         class="w-full h-full object-cover"
+                         class="w-full h-full object-cover transition-transform group-hover:scale-110"
                          onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNjY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHJlY3QgeD0iMyIgeT0iMyIgd2lkdGg9IjE4IiBoZWlnaHQ9IjE4IiByeD0iMiIgcnk9IjIiPjwvcmVjdD48cGF0aCBkPSJNMjEgMTV2NGEyIDIgMCAwIDEtMiAySDVhMiAyIDAgMCAxLTItMnYtNCI+PC9wYXRoPjxwb2x5bGluZSBwb2ludHM9IjE3IDggMTIgMyA3IDgiPjwvcG9seWxpbmU+PHBhdGggZD0iTTEyIDN2MTIiPjwvcGF0aD48L3N2Zz4='">
                     
-                    <!-- 速率显示在图片右上角 -->
-                    <div class="absolute top-1 right-1 speed-badge bg-black bg-opacity-75">
+                    <!-- 速率徽章 - 右上角 -->
+                    <div class="absolute top-1 right-1 speed-badge bg-black bg-opacity-75 rounded px-1.5 py-0.5">
                         ${formatSpeedDisplay(speedResult)}
                     </div>
                 </div>
+                
+                <!-- 资源信息 -->
                 <div class="mt-2">
-                    <div class="text-xs font-medium text-gray-200 truncate">${result.vod_name}</div>
+                    <div class="text-xs font-medium text-gray-200 truncate" title="${result.vod_name}">${result.vod_name}</div>
                     <div class="text-[10px] text-gray-400 truncate">${sourceName}</div>
-                    <div class="text-[10px] text-gray-500 mt-1">
-                        ${speedResult.episodes ? `${speedResult.episodes}集` : ''}
+                    <div class="text-[10px] text-gray-500 mt-1 flex justify-between">
+                        <span>${speedResult.episodes ? `${speedResult.episodes}集` : ''}</span>
+                        ${speedResult.speed !== -1 ? `<span class="text-blue-400">${speedResult.speed}ms</span>` : ''}
                     </div>
                 </div>
+                
+                <!-- 当前播放标签 -->
                 ${isCurrentSource ? `
-                    <div class="absolute inset-0 flex items-center justify-center">
-                        <div class="bg-blue-600 bg-opacity-75 rounded-lg px-2 py-0.5 text-xs text-white font-medium">
-                            当前播放
+                    <div class="absolute inset-0 flex items-center justify-center rounded-lg">
+                        <div class="bg-blue-600 bg-opacity-85 rounded-lg px-3 py-1.5 text-xs text-white font-bold shadow-lg">
+                            ✓ 当前播放
                         </div>
                     </div>
                 ` : ''}
@@ -1789,5 +1869,13 @@ async function switchToResource(sourceKey, vodId) {
         showToast('切换资源失败，请稍后重试', 'error');
     } finally {
         hideLoading();
+    }
+}
+
+// 关闭模态框
+function closeModal() {
+    const modal = document.getElementById('modal');
+    if (modal) {
+        modal.classList.add('hidden');
     }
 }
