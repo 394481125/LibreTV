@@ -793,10 +793,12 @@ async function search() {
                                  loading="lazy">
                             <div class="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent"></div>
                             <!-- 测速按钮和速度显示 -->
-                            <div class="search-result-speed-badge absolute top-1 right-1 bg-black bg-opacity-75 rounded px-1.5 py-0.5 text-xs" style="display:none;">
-                                <span class="speed-text">⚡ 测速</span>
+                            <!-- 速度徽章显示 -->
+                            <div class="search-result-speed-badge absolute top-2 right-2 rounded px-2 py-1 text-xs font-semibold backdrop-blur-sm" style="display:none; background: rgba(0,0,0,0.7); color: #fff;">
+                                <span class="speed-text">⚡ --ms</span>
                             </div>
-                            <button class="search-result-speed-btn absolute bottom-1 left-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white px-2 py-1 rounded text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity"
+                            <!-- 测速按钮 -->
+                            <button class="search-result-speed-btn absolute bottom-2 left-2 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white px-2 py-1 rounded text-xs font-semibold transition-all hover:shadow-lg"
                                     onclick="event.stopPropagation(); testSearchResultSpeed(this)"
                                     title="快速测试此资源速度">
                                 🚀 测速
@@ -1445,7 +1447,8 @@ async function testSearchResultSpeed(btn) {
         if (!response.ok) {
             const speedBadge = card.querySelector('.search-result-speed-badge');
             speedBadge.innerHTML = '<span class="speed-text">❌ 失败</span>';
-            speedBadge.classList.add('show');
+            speedBadge.style.display = 'block';
+            speedBadge.style.background = 'rgba(239, 68, 68, 0.8)';
             showToast(`${sourceName} 测速失败`, 'error');
             return;
         }
@@ -1458,21 +1461,25 @@ async function testSearchResultSpeed(btn) {
         let speedClass = 'good'; // 默认为快速
         let speedLabel = '快速';
         let icon = '🟢';
+        let bgColor = 'rgba(34, 197, 94, 0.8)';
         
         if (totalTime > 3000) {
             speedClass = 'poor';
             speedLabel = '慢';
             icon = '🔴';
+            bgColor = 'rgba(239, 68, 68, 0.8)';
         } else if (totalTime > 1500) {
             speedClass = 'medium';
             speedLabel = '中等';
             icon = '🟡';
+            bgColor = 'rgba(234, 179, 8, 0.8)';
         }
         
         // 更新速度徽章
         const speedBadge = card.querySelector('.search-result-speed-badge');
         speedBadge.innerHTML = `<span class="speed-text">${icon} ${totalTime}ms</span>`;
-        speedBadge.classList.add('show');
+        speedBadge.style.display = 'block';
+        speedBadge.style.background = bgColor;
         
         // 更新速度文本（在卡片底部）
         const speedText = card.querySelector('.search-result-speed-text');
@@ -1480,7 +1487,7 @@ async function testSearchResultSpeed(btn) {
         speedText.className = `search-result-speed-text ${speedClass}`;
         speedText.style.display = 'inline-block';
         
-        // 改变卡片背景色以显示速度
+        // 改变卡片边框颜色以显示速度
         if (speedClass === 'good') {
             card.style.borderLeft = '3px solid #22c55e';
         } else if (speedClass === 'medium') {
@@ -1495,13 +1502,59 @@ async function testSearchResultSpeed(btn) {
         console.error('测速失败:', error);
         const speedBadge = card.querySelector('.search-result-speed-badge');
         speedBadge.innerHTML = '<span class="speed-text">❌ 超时</span>';
-        speedBadge.classList.add('show');
+        speedBadge.style.display = 'block';
+        speedBadge.style.background = 'rgba(239, 68, 68, 0.8)';
         showToast(`${sourceName} 测速超时，请重试`, 'error');
     } finally {
         // 恢复按钮状态
         btn.disabled = false;
         btn.classList.remove('testing');
         btn.innerHTML = originalText;
+    }
+}
+
+// 批量测速所有搜索结果
+async function batchTestSearchResults() {
+    const resultsDiv = document.getElementById('results');
+    const buttons = resultsDiv.querySelectorAll('.search-result-speed-btn');
+    
+    if (buttons.length === 0) {
+        showToast('没有搜索结果可测速', 'warning');
+        return;
+    }
+    
+    const batchBtn = document.getElementById('batchTestSearchBtn');
+    const originalText = batchBtn.innerHTML;
+    batchBtn.disabled = true;
+    batchBtn.innerHTML = '<span>⏳</span><span id="batchTestSearchText">测速中... (0/' + buttons.length + ')</span>';
+    
+    let completed = 0;
+    
+    try {
+        // 逐个测速，每个测速之间有500ms的延迟
+        for (let i = 0; i < buttons.length; i++) {
+            const btn = buttons[i];
+            
+            // 执行测速
+            await testSearchResultSpeed(btn);
+            
+            completed++;
+            // 更新进度
+            document.getElementById('batchTestSearchText').textContent = `测速中... (${completed}/${buttons.length})`;
+            
+            // 延迟500ms再进行下一个测速，避免请求过快
+            if (i < buttons.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+        
+        showToast(`✓ 已完成 ${completed} 个资源的测速`, 'success');
+    } catch (error) {
+        console.error('批量测速失败:', error);
+        showToast('批量测速出现错误', 'error');
+    } finally {
+        batchBtn.disabled = false;
+        batchBtn.innerHTML = originalText;
     }
 }
 
