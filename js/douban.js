@@ -499,6 +499,33 @@ async function fetchDoubanData(url) {
     }
 }
 
+// 为豆瓣图片生成带鉴权的代理URL
+async function getAuthenticatedProxyUrl(originalUrl) {
+    try {
+        const proxiedUrl = PROXY_URL + encodeURIComponent(originalUrl);
+        // 添加鉴权参数到代理URL
+        if (window.ProxyAuth?.addAuthToProxyUrl) {
+            return await window.ProxyAuth.addAuthToProxyUrl(proxiedUrl);
+        }
+        return proxiedUrl;
+    } catch (error) {
+        console.error('生成代理URL失败:', error);
+        return PROXY_URL + encodeURIComponent(originalUrl);
+    }
+}
+
+// 处理豆瓣卡片图片加载失败
+async function handleDoubanImageError(imgElement, originalUrl) {
+    try {
+        const proxiedUrl = await getAuthenticatedProxyUrl(originalUrl);
+        imgElement.onerror = null;
+        imgElement.src = proxiedUrl;
+        imgElement.classList.add('object-contain');
+    } catch (error) {
+        console.error('处理图片失败回退时出错:', error);
+    }
+}
+
 // 抽取渲染豆瓣卡片的逻辑到单独函数
 function renderDoubanCards(data, container) {
     // 创建文档片段以提高性能
@@ -529,18 +556,14 @@ function renderDoubanCards(data, container) {
                 .replace(/>/g, '&gt;');
             
             // 处理图片URL
-            // 1. 直接使用豆瓣图片URL (添加no-referrer属性)
             const originalCoverUrl = item.cover;
-            
-            // 2. 也准备代理URL作为备选
-            const proxiedCoverUrl = PROXY_URL + encodeURIComponent(originalCoverUrl);
             
             // 为不同设备优化卡片布局
             card.innerHTML = `
                 <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
                     <img src="${originalCoverUrl}" alt="${safeTitle}" 
-                        class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                        onerror="this.onerror=null; this.src='${proxiedCoverUrl}'; this.classList.add('object-contain');"
+                        class="w-full h-full object-cover transition-transform duration-500 hover:scale-110 douban-cover-image"
+                        data-original-url="${originalCoverUrl}"
                         loading="lazy" referrerpolicy="no-referrer">
                     <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
                     <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
@@ -568,6 +591,18 @@ function renderDoubanCards(data, container) {
     // 清空并添加所有新元素
     container.innerHTML = "";
     container.appendChild(fragment);
+    
+    // 为所有豆瓣封面图片添加错误处理
+    const coverImages = container.querySelectorAll('.douban-cover-image');
+    coverImages.forEach(img => {
+        img.addEventListener('error', function() {
+            const originalUrl = this.getAttribute('data-original-url');
+            if (originalUrl && !this.hasAttribute('data-fallback-attempted')) {
+                this.setAttribute('data-fallback-attempted', 'true');
+                handleDoubanImageError(this, originalUrl);
+            }
+        }, { once: true });
+    });
 }
 
 // 重置到首页
