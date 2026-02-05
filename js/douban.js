@@ -406,6 +406,49 @@ function fetchDoubanTags() {
         });
 }
 
+// 根据标题搜索获取第一个结果的图片
+async function getImageFromSearch(title) {
+    try {
+        // 获取已选中的API
+        const builtInApiCheckboxes = document.querySelectorAll('#apiCheckboxes input:checked');
+        const selectedApis = Array.from(builtInApiCheckboxes).map(input => input.dataset.api);
+        
+        // 如果没有API被选中，默认使用第一个
+        if (selectedApis.length === 0) {
+            const firstCheckbox = document.querySelector('#apiCheckboxes input[type="checkbox"]');
+            if (firstCheckbox) {
+                selectedApis.push(firstCheckbox.dataset.api);
+            }
+        }
+        
+        // 尝试每个已选API进行搜索
+        for (const apiId of selectedApis) {
+            const results = await searchByAPIAndKeyWord(apiId, title);
+            if (results.length > 0 && results[0].vod_pic) {
+                return results[0].vod_pic;
+            }
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('搜索图片失败:', title, error);
+        return null;
+    }
+}
+
+// 生成随机颜色用于卡片背景
+function generateColorFromTitle(title) {
+    let hash = 0;
+    for (let i = 0; i < title.length; i++) {
+        hash = ((hash << 5) - hash) + title.charCodeAt(i);
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    const hue = Math.abs(hash) % 360;
+    const saturation = 60 + (Math.abs(hash) % 20);
+    const lightness = 35 + (Math.abs(hash) % 15);
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+}
+
 // 渲染热门推荐内容
 function renderRecommend(tag, pageLimit, pageStart) {
     const container = document.getElementById("douban-results");
@@ -427,8 +470,8 @@ function renderRecommend(tag, pageLimit, pageStart) {
     
     // 使用通用请求函数
     fetchDoubanData(target)
-        .then(data => {
-            renderDoubanCards(data, container);
+        .then(async (data) => {
+            await renderDoubanCards(data, container);
         })
         .catch(error => {
             console.error("获取豆瓣数据失败：", error);
@@ -499,21 +542,8 @@ async function fetchDoubanData(url) {
     }
 }
 
-// 生成随机颜色用于卡片背景
-function generateColorFromTitle(title) {
-    let hash = 0;
-    for (let i = 0; i < title.length; i++) {
-        hash = ((hash << 5) - hash) + title.charCodeAt(i);
-        hash = hash & hash; // Convert to 32bit integer
-    }
-    const hue = Math.abs(hash) % 360;
-    const saturation = 60 + (Math.abs(hash) % 20);
-    const lightness = 35 + (Math.abs(hash) % 15);
-    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-}
-
 // 抽取渲染豆瓣卡片的逻辑到单独函数
-function renderDoubanCards(data, container) {
+async function renderDoubanCards(data, container) {
     // 创建文档片段以提高性能
     const fragment = document.createDocumentFragment();
     
@@ -526,8 +556,14 @@ function renderDoubanCards(data, container) {
         `;
         fragment.appendChild(emptyEl);
     } else {
+        // 并行搜索所有标题的图片
+        const searchPromises = data.subjects.map(item => 
+            getImageFromSearch(item.title)
+        );
+        const imageUrls = await Promise.all(searchPromises);
+        
         // 循环创建每个影视卡片
-        data.subjects.forEach(item => {
+        data.subjects.forEach((item, index) => {
             const card = document.createElement("div");
             card.className = "bg-[#111] hover:bg-[#222] transition-all duration-300 rounded-lg overflow-hidden flex flex-col transform hover:scale-105 shadow-md hover:shadow-lg";
             
@@ -541,30 +577,57 @@ function renderDoubanCards(data, container) {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
             
-            // 生成基于标题的随机背景色
+            // 获取搜索结果的图片或使用背景色
+            const imageUrl = imageUrls[index];
             const bgColor = generateColorFromTitle(item.title);
             
-            // 为不同设备优化卡片布局 - 使用纯色背景+标题，可靠性最高
-            card.innerHTML = `
-                <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer flex items-end justify-start p-3" 
-                     style="background: linear-gradient(135deg, ${bgColor} 0%, ${bgColor}dd 100%);"
-                     onclick="fillAndSearchWithDouban('${safeTitle}')">
-                    <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80"></div>
-                    
-                    <div class="relative z-10 w-full">
-                        <div class="text-white font-bold text-sm line-clamp-2 mb-2">${safeTitle}</div>
-                        <div class="flex justify-between items-end">
-                            <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm">
-                                <span class="text-yellow-400">★</span> ${safeRate}
-                            </div>
-                            <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm hover:bg-pink-600 transition-colors">
-                                <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
-                                    🔗
-                                </a>
+            // 创建主要内容区域
+            let contentHtml = '';
+            if (imageUrl) {
+                // 有搜索结果图片，显示图片
+                contentHtml = `
+                    <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
+                        <img src="${imageUrl}" alt="${safeTitle}" 
+                            class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                            loading="lazy">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
+                        <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
+                            <span class="text-yellow-400">★</span> ${safeRate}
+                        </div>
+                        <div class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm hover:bg-[#333] transition-colors">
+                            <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
+                                🔗
+                            </a>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // 没有找到图片，使用背景色+标题
+                contentHtml = `
+                    <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer flex items-end justify-start p-3" 
+                         style="background: linear-gradient(135deg, ${bgColor} 0%, ${bgColor}dd 100%);"
+                         onclick="fillAndSearchWithDouban('${safeTitle}')">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80"></div>
+                        
+                        <div class="relative z-10 w-full">
+                            <div class="text-white font-bold text-sm line-clamp-2 mb-2">${safeTitle}</div>
+                            <div class="flex justify-between items-end">
+                                <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm">
+                                    <span class="text-yellow-400">★</span> ${safeRate}
+                                </div>
+                                <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm hover:bg-pink-600 transition-colors">
+                                    <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
+                                        🔗
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                `;
+            }
+            
+            // 整合卡片内容
+            card.innerHTML = contentHtml + `
                 <div class="p-2 text-center bg-[#111]">
                     <button onclick="fillAndSearchWithDouban('${safeTitle}')" 
                             class="text-sm font-medium text-white truncate w-full hover:text-pink-400 transition"
