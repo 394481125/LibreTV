@@ -528,16 +528,18 @@ function renderDoubanCards(data, container) {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
             
-            // 处理图片URL - 先尝试直接访问（豆瓣通常允许带正确referer的访问）
+            // 处理图片URL - 使用在线代理服务绕过防盗链
             const originalCoverUrl = item.cover;
+            // 使用weserv在线图片代理（支持跨域、防盗链绕过）
+            const proxiedImageUrl = 'https://images.weserv.nl/?url=' + encodeURIComponent(originalCoverUrl) + '&n=-1';
             
             // 为不同设备优化卡片布局
             card.innerHTML = `
                 <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
-                    <img src="${originalCoverUrl}" alt="${safeTitle}" 
+                    <img src="${proxiedImageUrl}" alt="${safeTitle}" 
                         class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                        onerror="this.onerror=null; this.src='${PROXY_URL + encodeURIComponent(originalCoverUrl)}'; this.classList.add('object-contain');"
-                        loading="lazy" referrerpolicy="no-referrer">
+                        onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgNDUwIj48cmVjdCBmaWxsPSIjMzMzIiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNjY2IiBhbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPumhtemlvOaIkOWKoOiDveiQveWPkeaOkueUqDwvdGV4dD48L3N2Zz4=';"
+                        loading="lazy">
                     <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
                     <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
                         <span class="text-yellow-400">★</span> ${safeRate}
