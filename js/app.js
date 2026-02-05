@@ -747,8 +747,9 @@ async function search() {
             const hasCover = item.vod_pic && item.vod_pic.startsWith('http');
 
             return `
-                <div class="card-hover bg-[#111] rounded-lg overflow-hidden cursor-pointer transition-all hover:scale-[1.02] h-full shadow-sm hover:shadow-md" 
-                     onclick="showDetails('${safeId}','${safeName}','${sourceCode}')" ${apiUrlAttr}>
+                <div class="card-hover bg-[#111] rounded-lg overflow-hidden cursor-pointer transition-all hover:scale-[1.02] h-full shadow-sm hover:shadow-md relative search-result-card" 
+                     onclick="showDetails('${safeId}','${safeName}','${sourceCode}')" ${apiUrlAttr}
+                     data-source-code="${sourceCode}" data-vod-id="${safeId}" data-source-name="${item.source_name || ''}">
                     <div class="flex h-full">
                         ${hasCover ? `
                         <div class="relative flex-shrink-0 search-card-img-container">
@@ -757,6 +758,15 @@ async function search() {
                                  onerror="this.onerror=null; this.src='https://via.placeholder.com/300x450?text=无封面'; this.classList.add('object-contain');" 
                                  loading="lazy">
                             <div class="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent"></div>
+                            <!-- 测速按钮和速度显示 -->
+                            <div class="search-result-speed-badge absolute top-1 right-1 bg-black bg-opacity-75 rounded px-1.5 py-0.5 text-xs" style="display:none;">
+                                <span class="speed-text">⚡ 测速</span>
+                            </div>
+                            <button class="search-result-speed-btn absolute bottom-1 left-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white px-2 py-1 rounded text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onclick="event.stopPropagation(); testSearchResultSpeed(this)"
+                                    title="快速测试此资源速度">
+                                🚀 测速
+                            </button>
                         </div>` : ''}
                         
                         <div class="p-2 flex flex-col flex-grow">
@@ -780,16 +790,9 @@ async function search() {
                             
                             <div class="flex justify-between items-center mt-1 pt-1 border-t border-gray-800">
                                 ${sourceInfo ? `<div>${sourceInfo}</div>` : '<div></div>'}
-                                <!-- 接口名称过长会被挤变形
-                                <div>
-                                    <span class="text-gray-500 flex items-center hover:text-blue-400 transition-colors">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                        </svg>
-                                        播放
-                                    </span>
+                                <div class="text-xs text-gray-400">
+                                    <span class="search-result-speed-text"></span>
                                 </div>
-                                -->
                             </div>
                         </div>
                     </div>
@@ -1351,6 +1354,121 @@ function saveStringAsFile(content, fileName) {
     // 清理临时对象
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+}
+
+// 搜索结果测速函数
+async function testSearchResultSpeed(btn) {
+    if (!btn || btn.disabled) return;
+    
+    const card = btn.closest('.search-result-card');
+    if (!card) return;
+    
+    const sourceCode = card.getAttribute('data-source-code');
+    const vodId = card.getAttribute('data-vod-id');
+    const sourceName = card.getAttribute('data-source-name');
+    
+    if (!sourceCode || !vodId) {
+        showToast('无法获取资源信息', 'error');
+        return;
+    }
+    
+    // 禁用按钮并显示加载状态
+    btn.disabled = true;
+    btn.classList.add('testing');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ 测速中...';
+    
+    try {
+        // 构建API参数
+        let apiParams = '';
+        if (sourceCode.startsWith('custom_')) {
+            const customIndex = sourceCode.replace('custom_', '');
+            const customApi = getCustomApiInfo(customIndex);
+            if (!customApi) {
+                showToast('API配置无效', 'error');
+                return;
+            }
+            if (customApi.detail) {
+                apiParams = '&customApi=' + encodeURIComponent(customApi.url) + '&customDetail=' + encodeURIComponent(customApi.detail) + '&source=custom';
+            } else {
+                apiParams = '&customApi=' + encodeURIComponent(customApi.url) + '&source=custom';
+            }
+        } else {
+            apiParams = '&source=' + sourceCode;
+        }
+        
+        const startTime = performance.now();
+        const timestamp = new Date().getTime();
+        const cacheBuster = `&_t=${timestamp}`;
+        
+        // 测试API响应
+        const response = await fetch(`/api/detail?id=${encodeURIComponent(vodId)}${apiParams}${cacheBuster}`, {
+            method: 'GET',
+            cache: 'no-cache',
+            signal: AbortSignal.timeout(5000) // 5秒超时
+        });
+        
+        if (!response.ok) {
+            const speedBadge = card.querySelector('.search-result-speed-badge');
+            speedBadge.innerHTML = '<span class="speed-text">❌ 失败</span>';
+            speedBadge.classList.add('show');
+            showToast(`${sourceName} 测速失败`, 'error');
+            return;
+        }
+        
+        const data = await response.json();
+        const endTime = performance.now();
+        const totalTime = Math.round(endTime - startTime);
+        
+        // 判断速度等级
+        let speedClass = 'good'; // 默认为快速
+        let speedLabel = '快速';
+        let icon = '🟢';
+        
+        if (totalTime > 3000) {
+            speedClass = 'poor';
+            speedLabel = '慢';
+            icon = '🔴';
+        } else if (totalTime > 1500) {
+            speedClass = 'medium';
+            speedLabel = '中等';
+            icon = '🟡';
+        }
+        
+        // 更新速度徽章
+        const speedBadge = card.querySelector('.search-result-speed-badge');
+        speedBadge.innerHTML = `<span class="speed-text">${icon} ${totalTime}ms</span>`;
+        speedBadge.classList.add('show');
+        
+        // 更新速度文本（在卡片底部）
+        const speedText = card.querySelector('.search-result-speed-text');
+        speedText.textContent = `${speedLabel} · ${totalTime}ms`;
+        speedText.className = `search-result-speed-text ${speedClass}`;
+        speedText.style.display = 'inline-block';
+        
+        // 改变卡片背景色以显示速度
+        if (speedClass === 'good') {
+            card.style.borderLeft = '3px solid #22c55e';
+        } else if (speedClass === 'medium') {
+            card.style.borderLeft = '3px solid #eab308';
+        } else if (speedClass === 'poor') {
+            card.style.borderLeft = '3px solid #ef4444';
+        }
+        
+        showToast(`✓ ${sourceName} 速度: ${totalTime}ms - ${speedLabel}`, 'success');
+        
+    } catch (error) {
+        console.error('测速失败:', error);
+        const speedBadge = card.querySelector('.search-result-speed-badge');
+        speedBadge.innerHTML = '<span class="speed-text">❌ 超时</span>';
+        speedBadge.classList.add('show');
+        showToast(`${sourceName} 测速超时，请重试`, 'error');
+    } finally {
+        // 恢复按钮状态
+        btn.disabled = false;
+        btn.classList.remove('testing');
+        btn.innerHTML = originalText;
+    }
 }
 
 // 移除Node.js的require语句，因为这是在浏览器环境中运行的
