@@ -304,6 +304,111 @@ api: 'https://www.kuaiyunzy.com/api.php/provide/vod/',
 name: '快云|点播',
 },
 };
+// Additional sites
+CUSTOMER_SITES.liangzi3 = {
+    api: 'http://cj.lziapi.com/api.php/provide/vod/',
+    name: '🐝量子资源',
+};
+CUSTOMER_SITES.siwa2 = {
+    api: 'https://siwazyw.cc/api.php/provide/vod/',
+    name: '丝袜资源',
+};
+CUSTOMER_SITES.ma91_1 = {
+    api: 'https://md91.cc/api.php/provide/vod/',
+    name: '*91麻豆',
+};
+CUSTOMER_SITES.tantancn = {
+    api: 'https://apittzy.com/api.php/provide/vod/',
+    name: '*探探资源',
+};
+CUSTOMER_SITES.jiuyao = {
+    api: 'http://99zy.pw/api.php/provide/vod/',
+    name: '*99资源',
+};
+CUSTOMER_SITES.jpzy = {
+    api: 'https://www.jpysvip.net/api.php/provide/vod/at/xml/',
+    name: '极品资源',
+};
+CUSTOMER_SITES.kankanju = {
+    api: 'http://www.kkkanju.com/api.php/provide/vod/at/xml',
+    name: 'KK看剧',
+};
+CUSTOMER_SITES.fantuan = {
+    api: 'https://fantuan.wkfile.com/api.php/provide/vod/at/xml',
+    name: '饭团资源',
+};
+CUSTOMER_SITES.leqiyi = {
+    api: 'https://www.lqiyi.co/api.php/provide/vod/at/xml',
+    name: '乐奇艺',
+};
+CUSTOMER_SITES.umao = {
+    api: 'http://umao.ml/api.php/provide/vod/at/xml',
+    name: 'u猫',
+};
+CUSTOMER_SITES.kuaiboyun = {
+    api: 'http://www.kuaibozy.com/api.php/provide/vod/at/xml/',
+    name: '快播云',
+};
+CUSTOMER_SITES.ks39 = {
+    api: 'https://www.39kan.com/api.php/provide/vod/at/xml',
+    name: '39影视',
+};
+CUSTOMER_SITES.anyi = {
+    api: 'http://dy.51isu.com:11801/api.php/provide/vod/at/xml',
+    name: '安逸影院',
+};
+CUSTOMER_SITES.wujin2 = {
+    api: 'https://api.wujinapi.com/api.php/provide/vod/from/wjm3u8/at/xml/',
+    name: '无尽资源',
+};
+CUSTOMER_SITES.kongbuya = {
+    api: 'https://kongbuya.com/api.php/provide/vod/at/xml/',
+    name: '恐怖鸭资源',
+};
+CUSTOMER_SITES.mangguo = {
+    api: 'https://www.mgav1.cc/api.php/provide/vod/at/xml/',
+    name: '芒果',
+};
+CUSTOMER_SITES.zhentan = {
+    api: 'http://ys.huangguay.com/api.php/provide/vod/at/xml/',
+    name: '侦探APP',
+};
+CUSTOMER_SITES.mengguo = {
+    api: 'http://api.appearoo.top/api.php/provide/vod/at/xml/',
+    name: '萌果资源',
+};
+CUSTOMER_SITES.susou = {
+    api: 'http://www.susouzy.com/api.php/provide/vod/at/xml',
+    name: '速搜资源',
+};
+CUSTOMER_SITES.dianyingn = {
+    api: 'https://www.dianyingn.com/api.php/provide/vod/at/xml/',
+    name: '电影牛',
+};
+CUSTOMER_SITES.haohao = {
+    api: 'http://haohaozy.com/api.php/provide/vod/at/xml/',
+    name: '好好资源',
+};
+CUSTOMER_SITES.ma91_2 = {
+    api: 'https://91md.me/api.php/provide/vod/',
+    name: '*91麻豆',
+};
+CUSTOMER_SITES.kudou = {
+    api: 'https://kudouzy.com/api.php/provide/vod/',
+    name: '*酷豆资源',
+};
+CUSTOMER_SITES.huajiao = {
+    api: 'https://apihjzy.com/api.php/provide/vod/',
+    name: '*花椒资源',
+};
+CUSTOMER_SITES.lebo = {
+    api: 'https://lbapi9.com/api.php/provide/vod/',
+    name: '*乐播资源',
+};
+CUSTOMER_SITES.fanhao = {
+    api: 'http://fhapi9.com/api.php/provide/vod/',
+    name: '*番号资源',
+};
 
 // 调用全局方法合并
 if (window.extendAPISites) {
