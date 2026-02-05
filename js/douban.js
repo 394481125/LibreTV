@@ -499,6 +499,19 @@ async function fetchDoubanData(url) {
     }
 }
 
+// 生成随机颜色用于卡片背景
+function generateColorFromTitle(title) {
+    let hash = 0;
+    for (let i = 0; i < title.length; i++) {
+        hash = ((hash << 5) - hash) + title.charCodeAt(i);
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    const hue = Math.abs(hash) % 360;
+    const saturation = 60 + (Math.abs(hash) % 20);
+    const lightness = 35 + (Math.abs(hash) % 15);
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+}
+
 // 抽取渲染豆瓣卡片的逻辑到单独函数
 function renderDoubanCards(data, container) {
     // 创建文档片段以提高性能
@@ -528,26 +541,28 @@ function renderDoubanCards(data, container) {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
             
-            // 处理图片URL - 使用在线代理服务绕过防盗链
-            const originalCoverUrl = item.cover;
-            // 使用weserv在线图片代理（支持跨域、防盗链绕过）
-            const proxiedImageUrl = 'https://images.weserv.nl/?url=' + encodeURIComponent(originalCoverUrl) + '&n=-1';
+            // 生成基于标题的随机背景色
+            const bgColor = generateColorFromTitle(item.title);
             
-            // 为不同设备优化卡片布局
+            // 为不同设备优化卡片布局 - 使用纯色背景+标题，可靠性最高
             card.innerHTML = `
-                <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
-                    <img src="${proxiedImageUrl}" alt="${safeTitle}" 
-                        class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                        onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMDAgNDUwIj48cmVjdCBmaWxsPSIjMzMzIiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNjY2IiBhbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPumhtemlvOaIkOWKoOiDveiQveWPkeaOkueUqDwvdGV4dD48L3N2Zz4=';"
-                        loading="lazy">
-                    <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
-                    <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
-                        <span class="text-yellow-400">★</span> ${safeRate}
-                    </div>
-                    <div class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm hover:bg-[#333] transition-colors">
-                        <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
-                            🔗
-                        </a>
+                <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer flex items-end justify-start p-3" 
+                     style="background: linear-gradient(135deg, ${bgColor} 0%, ${bgColor}dd 100%);"
+                     onclick="fillAndSearchWithDouban('${safeTitle}')">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80"></div>
+                    
+                    <div class="relative z-10 w-full">
+                        <div class="text-white font-bold text-sm line-clamp-2 mb-2">${safeTitle}</div>
+                        <div class="flex justify-between items-end">
+                            <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm">
+                                <span class="text-yellow-400">★</span> ${safeRate}
+                            </div>
+                            <div class="bg-black/60 text-white text-xs px-2 py-1 rounded-sm hover:bg-pink-600 transition-colors">
+                                <a href="${item.url}" target="_blank" rel="noopener noreferrer" title="在豆瓣查看" onclick="event.stopPropagation();">
+                                    🔗
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="p-2 text-center bg-[#111]">
