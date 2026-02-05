@@ -83,13 +83,19 @@ function initAPICheckboxes() {
         const checked = selectedAPIs.includes(apiKey);
 
         const checkbox = document.createElement('div');
-        checkbox.className = 'flex items-center';
+        checkbox.className = 'flex items-center justify-between group api-checkbox-item';
         checkbox.innerHTML = `
-            <input type="checkbox" id="api_${apiKey}" 
-                   class="form-checkbox h-3 w-3 text-blue-600 bg-[#222] border border-[#333]" 
-                   ${checked ? 'checked' : ''} 
-                   data-api="${apiKey}">
-            <label for="api_${apiKey}" class="ml-1 text-xs text-gray-400 truncate">${api.name}</label>
+            <div class="flex items-center flex-1 min-w-0">
+                <input type="checkbox" id="api_${apiKey}" 
+                       class="form-checkbox h-3 w-3 text-blue-600 bg-[#222] border border-[#333]" 
+                       ${checked ? 'checked' : ''} 
+                       data-api="${apiKey}">
+                <label for="api_${apiKey}" class="ml-1 text-xs text-gray-400 truncate">${api.name}</label>
+            </div>
+            <button class="api-speed-test-btn text-xs px-1.5 py-0.5 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0"
+                    onclick="event.stopPropagation(); testAPISourceSpeed(this, '${apiKey}', false)"
+                    title="测试此API源的速度">⚡</button>
+            <span class="api-speed-text text-xs ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0"></span>
         `;
         normaldiv.appendChild(checkbox);
 
@@ -135,13 +141,19 @@ function addAdultAPI() {
             const checked = selectedAPIs.includes(apiKey);
 
             const checkbox = document.createElement('div');
-            checkbox.className = 'flex items-center';
+            checkbox.className = 'flex items-center justify-between group api-checkbox-item';
             checkbox.innerHTML = `
-                <input type="checkbox" id="api_${apiKey}" 
-                       class="form-checkbox h-3 w-3 text-blue-600 bg-[#222] border border-[#333] api-adult" 
-                       ${checked ? 'checked' : ''} 
-                       data-api="${apiKey}">
-                <label for="api_${apiKey}" class="ml-1 text-xs text-pink-400 truncate">${api.name}</label>
+                <div class="flex items-center flex-1 min-w-0">
+                    <input type="checkbox" id="api_${apiKey}" 
+                           class="form-checkbox h-3 w-3 text-blue-600 bg-[#222] border border-[#333] api-adult" 
+                           ${checked ? 'checked' : ''} 
+                           data-api="${apiKey}">
+                    <label for="api_${apiKey}" class="ml-1 text-xs text-pink-400 truncate">${api.name}</label>
+                </div>
+                <button class="api-speed-test-btn text-xs px-1.5 py-0.5 bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0"
+                        onclick="event.stopPropagation(); testAPISourceSpeed(this, '${apiKey}', false)"
+                        title="测试此API源的速度">⚡</button>
+                <span class="api-speed-text text-xs ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0"></span>
             `;
             adultdiv.appendChild(checkbox);
 
@@ -219,7 +231,7 @@ function renderCustomAPIsList() {
     container.innerHTML = '';
     customAPIs.forEach((api, index) => {
         const apiItem = document.createElement('div');
-        apiItem.className = 'flex items-center justify-between p-1 mb-1 bg-[#222] rounded';
+        apiItem.className = 'flex items-center justify-between p-1 mb-1 bg-[#222] rounded group api-checkbox-item';
         const textColorClass = api.isAdult ? 'text-pink-400' : 'text-white';
         const adultTag = api.isAdult ? '<span class="text-xs text-pink-400 mr-1">(18+)</span>' : '';
         // 新增 detail 地址显示
@@ -238,9 +250,13 @@ function renderCustomAPIsList() {
                     ${detailLine}
                 </div>
             </div>
-            <div class="flex items-center">
-                <button class="text-blue-500 hover:text-blue-700 text-xs px-1" onclick="editCustomApi(${index})">✎</button>
-                <button class="text-red-500 hover:text-red-700 text-xs px-1" onclick="removeCustomApi(${index})">✕</button>
+            <div class="flex items-center gap-1">
+                <button class="api-speed-test-btn text-xs px-1.5 py-0.5 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        onclick="event.stopPropagation(); testAPISourceSpeed(this, 'custom_${index}', true)"
+                        title="测试此API源的速度">⚡</button>
+                <span class="api-speed-text text-xs opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0"></span>
+                <button class="text-blue-500 hover:text-blue-700 text-xs px-1 flex-shrink-0" onclick="editCustomApi(${index})">✎</button>
+                <button class="text-red-500 hover:text-red-700 text-xs px-1 flex-shrink-0" onclick="removeCustomApi(${index})">✕</button>
             </div>
         `;
         container.appendChild(apiItem);
@@ -1468,6 +1484,128 @@ async function testSearchResultSpeed(btn) {
         btn.disabled = false;
         btn.classList.remove('testing');
         btn.innerHTML = originalText;
+    }
+}
+
+// 设置界面API源一键测速
+async function testAPISourceSpeed(btn, apiKey, isCustom) {
+    if (!btn || btn.disabled) return;
+    
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = '⏳';
+    
+    const speedText = btn.nextElementSibling;
+    if (speedText) {
+        speedText.textContent = '测试中...';
+        speedText.style.opacity = '1';
+    }
+    
+    try {
+        let apiUrl = '';
+        let apiName = '';
+        
+        if (isCustom) {
+            // 自定义 API
+            const customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]');
+            const index = parseInt(apiKey.replace('custom_', ''));
+            if (customAPIs[index]) {
+                apiUrl = customAPIs[index].url;
+                apiName = customAPIs[index].name;
+            }
+        } else {
+            // 内置 API
+            if (API_SITES[apiKey]) {
+                apiUrl = API_SITES[apiKey].api;
+                apiName = API_SITES[apiKey].name;
+            }
+        }
+        
+        if (!apiUrl) {
+            throw new Error('API地址获取失败');
+        }
+        
+        // 构建测试请求 - 使用搜索接口
+        const testKeyword = '测试';
+        const testUrl = `${apiUrl}?ac=videolist&t=${encodeURIComponent(testKeyword)}`;
+        
+        const startTime = Date.now();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(testUrl, {
+            signal: controller.signal,
+            mode: 'no-cors'
+        });
+        
+        clearTimeout(timeoutId);
+        const endTime = Date.now();
+        const totalTime = endTime - startTime;
+        
+        // 根据速度判断等级
+        let speedClass = 'good';
+        let speedLabel = '极快';
+        if (totalTime > 3000) {
+            speedClass = 'poor';
+            speedLabel = '慢';
+        } else if (totalTime > 1500) {
+            speedClass = 'medium';
+            speedLabel = '正常';
+        }
+        
+        // 更新按钮外观
+        btn.textContent = '✓';
+        btn.classList.remove('opacity-0', 'group-hover:opacity-100');
+        btn.classList.add('opacity-100');
+        
+        // 更新速度文本显示
+        if (speedText) {
+            speedText.textContent = `${totalTime}ms`;
+            speedText.className = `api-speed-text text-xs opacity-100 transition-opacity flex-shrink-0 ${
+                speedClass === 'good' ? 'text-green-400' :
+                speedClass === 'medium' ? 'text-yellow-400' :
+                'text-red-400'
+            }`;
+        }
+        
+        showToast(`✓ ${apiName} 速度: ${totalTime}ms - ${speedLabel}`, 'success');
+        
+        // 3秒后恢复原始状态
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            btn.classList.remove('opacity-100');
+            btn.classList.add('opacity-0', 'group-hover:opacity-100');
+            if (speedText) {
+                speedText.textContent = '';
+                speedText.className = 'api-speed-text text-xs opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0';
+            }
+        }, 3000);
+        
+    } catch (error) {
+        console.error('API测速失败:', error);
+        btn.textContent = '❌';
+        btn.classList.remove('opacity-0', 'group-hover:opacity-100');
+        btn.classList.add('opacity-100');
+        
+        if (speedText) {
+            speedText.textContent = '超时';
+            speedText.className = 'api-speed-text text-xs opacity-100 transition-opacity flex-shrink-0 text-red-400';
+        }
+        
+        showToast('测速超时或API无响应，请检查地址', 'error');
+        
+        // 3秒后恢复原始状态
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            btn.classList.remove('opacity-100');
+            btn.classList.add('opacity-0', 'group-hover:opacity-100');
+            if (speedText) {
+                speedText.textContent = '';
+                speedText.className = 'api-speed-text text-xs opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0';
+            }
+        }, 3000);
     }
 }
 
