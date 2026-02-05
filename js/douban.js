@@ -406,7 +406,25 @@ function fetchDoubanTags() {
         });
 }
 
-// 根据标题搜索获取第一个结果的图片
+// 获取代理后的豆瓣图片URL（使用CDN加速）
+function getProxiedDoubanImage(picUrl) {
+    if (!picUrl) return null;
+    
+    // 如果已经是代理URL，直接返回
+    if (picUrl.includes('proxy') || picUrl.includes('allorigins')) {
+        return picUrl;
+    }
+    
+    // 使用allorigins CDN加速豆瓣图片
+    try {
+        return `https://images.weserv.nl/?url=${encodeURIComponent(picUrl)}`;
+    } catch (e) {
+        console.error('代理图片URL失败:', e);
+        return picUrl; // 返回原始URL作为备选
+    }
+}
+
+// 根据标题搜索获取第一个结果的图片（仅作为备用方案）
 async function getImageFromSearch(title) {
     try {
         // 获取已选中的API
@@ -434,6 +452,50 @@ async function getImageFromSearch(title) {
         console.error('搜索图片失败:', title, error);
         return null;
     }
+}
+
+// 初始化图片懒加载
+function initLazyLoadImages() {
+    // 使用 Intersection Observer 实现高效图片懒加载
+    if (!('IntersectionObserver' in window)) {
+        // 如果浏览器不支持 IntersectionObserver，直接加载所有图片
+        const lazyImages = document.querySelectorAll('.lazy-image');
+        lazyImages.forEach(img => {
+            if (img.dataset.src && !img.src.includes('http')) {
+                img.src = img.dataset.src;
+            }
+        });
+        return;
+    }
+    
+    const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                if (img.dataset.src && !img.src.includes('http')) {
+                    img.src = img.dataset.src;
+                    // 加载图片作为备选
+                    img.onerror = function() {
+                        // 如果代理图片失败，尝试原始豆瓣图片
+                        const originalUrl = img.dataset.src.split('?url=')[1];
+                        if (originalUrl) {
+                            try {
+                                img.src = decodeURIComponent(originalUrl);
+                            } catch (e) {
+                                console.error('图片加载失败:', e);
+                            }
+                        }
+                    };
+                }
+                observer.unobserve(img);
+            }
+        });
+    }, {
+        rootMargin: '50px' // 提前 50px 开始加载图片
+    });
+    
+    const lazyImages = document.querySelectorAll('.lazy-image');
+    lazyImages.forEach(img => imageObserver.observe(img));
 }
 
 // 生成随机颜色用于卡片背景
@@ -556,14 +618,9 @@ async function renderDoubanCards(data, container) {
         `;
         fragment.appendChild(emptyEl);
     } else {
-        // 并行搜索所有标题的图片
-        const searchPromises = data.subjects.map(item => 
-            getImageFromSearch(item.title)
-        );
-        const imageUrls = await Promise.all(searchPromises);
-        
+        // 直接使用豆瓣API提供的图片，无需搜索，大幅提升加载速度
         // 循环创建每个影视卡片
-        data.subjects.forEach((item, index) => {
+        data.subjects.forEach((item) => {
             const card = document.createElement("div");
             card.className = "bg-[#111] hover:bg-[#222] transition-all duration-300 rounded-lg overflow-hidden flex flex-col transform hover:scale-105 shadow-md hover:shadow-lg";
             
@@ -577,18 +634,20 @@ async function renderDoubanCards(data, container) {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
             
-            // 获取搜索结果的图片或使用背景色
-            const imageUrl = imageUrls[index];
+            // 使用豆瓣API提供的图片URL，如果失败则使用背景色
+            const imageUrl = item.pic ? getProxiedDoubanImage(item.pic) : null;
             const bgColor = generateColorFromTitle(item.title);
             
             // 创建主要内容区域
             let contentHtml = '';
             if (imageUrl) {
-                // 有搜索结果图片，显示图片
+                // 有豆瓣图片，显示图片（使用懒加载）
                 contentHtml = `
                     <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
-                        <img src="${imageUrl}" alt="${safeTitle}" 
-                            class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 600'%3E%3Crect fill='%23222' width='400' height='600'/%3E%3C/svg%3E" 
+                             data-src="${imageUrl}" 
+                             alt="${safeTitle}" 
+                             class="w-full h-full object-cover transition-transform duration-500 hover:scale-110 lazy-image"
                             loading="lazy">
                         <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
                         <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
@@ -644,6 +703,9 @@ async function renderDoubanCards(data, container) {
     // 清空并添加所有新元素
     container.innerHTML = "";
     container.appendChild(fragment);
+    
+    // 初始化图片懒加载
+    initLazyLoadImages();
 }
 
 // 重置到首页
