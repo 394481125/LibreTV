@@ -409,6 +409,62 @@ CUSTOMER_SITES.fanhao = {
     api: 'http://fhapi9.com/api.php/provide/vod/',
     name: '*番号资源',
 };
+CUSTOMER_SITES.shayu = {
+    api: 'https://shayuapi.com/api.php/provide/vod/',
+    name: '鲨鱼资源|AV',
+};
+CUSTOMER_SITES.aivin = {
+    api: 'http://lbapiby.com/api.php/provide/vod/at/json',
+    name: 'AIvin|AV',
+};
+CUSTOMER_SITES.huanggua = {
+    api: 'https://www.zy018.com/api.php/provide/vod/',
+    name: '黄瓜资源|AV',
+};
+CUSTOMER_SITES.yutu = {
+    api: 'https://apiyutu.com/api.php/provide/vod/',
+    name: '玉兔资源|AV',
+};
+CUSTOMER_SITES.lajiao = {
+    api: 'https://apilj.com/api.php/provide/vod/',
+    name: '辣椒资源|AV',
+};
+CUSTOMER_SITES.naixiangxiang = {
+    api: 'https://Naixxzy.com/api.php/provide/vod/',
+    name: '奶香香|AV',
+};
+CUSTOMER_SITES.jingpin = {
+    api: 'https://www.jingpinx.com/api.php/provide/vod/',
+    name: '精品资源|AV',
+};
+CUSTOMER_SITES.caoliu = {
+    api: 'https://www.caoliuzyw.com/api.php/prodao/vod/',
+    name: '草榴资源|AV',
+};
+CUSTOMER_SITES.laosebi = {
+    api: 'https://apilsbzy1.com/api.php/provide/vod/',
+    name: '老色逼资源|AV',
+};
+CUSTOMER_SITES.didi = {
+    api: 'https://api.ddapi.cc/api.php/provide/vod/',
+    name: '滴滴资源|AV',
+};
+CUSTOMER_SITES.batian = {
+    api: 'https://8day.icu/api.php/provide/vod/',
+    name: '八天影视|AV',
+};
+CUSTOMER_SITES.shiyuan = {
+    api: 'https://xxavs.com/api.php/provide/vod/',
+    name: '湿园影视|AV',
+};
+CUSTOMER_SITES.youyou = {
+    api: 'https://a.uezy.pw/api.php/provide/vod/',
+    name: '优异影视|AV',
+};
+CUSTOMER_SITES.yiyiwu = {
+    api: 'https://155api.com/api.php/provide/vod/',
+    name: '155资源|AV',
+};
 
 // 调用全局方法合并
 if (window.extendAPISites) {
