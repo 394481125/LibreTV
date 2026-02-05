@@ -89,10 +89,16 @@
                 </div>
                 
                 <!-- API信息显示 -->
-                <div class="text-xs text-gray-500 flex justify-between items-center">
+                <div class="text-xs text-gray-500 flex justify-between items-center mb-3">
                     <span>已选API数量：<span id="selectedApiCount" class="text-white">0</span></span>
                     <span id="siteStatus" class="ml-2"></span>
                 </div>
+                
+                <!-- 批量测速按钮 -->
+                <button id="batchTestBtn" onclick="batchTestAllAPIs()" class="px-3 py-2 w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded text-xs transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    <span>⚡</span>
+                    <span id="batchTestText">全部测速</span>
+                </button>
             </div>
 
             <!-- 自定义API管理区域 -->

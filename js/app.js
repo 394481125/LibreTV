@@ -11,6 +11,9 @@ let currentVideoTitle = '';
 // 全局变量用于倒序状态
 let episodesReversed = false;
 
+// 测速结果缓存
+let apiSpeedCache = JSON.parse(localStorage.getItem('apiSpeedCache') || '{}');
+
 // 页面初始化
 document.addEventListener('DOMContentLoaded', function () {
     // 初始化API复选框
@@ -81,6 +84,9 @@ function initAPICheckboxes() {
         if (api.adult) return; // 跳过成人内容API，稍后添加
 
         const checked = selectedAPIs.includes(apiKey);
+        
+        // 获取缓存的测速结果
+        const cachedSpeed = apiSpeedCache[apiKey];
 
         const checkbox = document.createElement('div');
         checkbox.className = 'flex items-center justify-between group api-checkbox-item';
@@ -92,10 +98,12 @@ function initAPICheckboxes() {
                        data-api="${apiKey}">
                 <label for="api_${apiKey}" class="ml-1 text-xs text-gray-400 truncate">${api.name}</label>
             </div>
-            <button class="api-speed-test-btn text-xs px-1.5 py-0.5 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0"
-                    onclick="event.stopPropagation(); testAPISourceSpeed(this, '${apiKey}', false)"
-                    title="测试此API源的速度">⚡</button>
-            <span class="api-speed-text text-xs ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0"></span>
+            <div class="flex items-center gap-1">
+                ${cachedSpeed ? `<span class="speed-indicator ${getSpeedClass(cachedSpeed.speed)}" title="${cachedSpeed.speed}ms">${formatSpeedBadge(cachedSpeed.speed)}</span>` : ''}
+                <button class="api-speed-test-btn text-xs px-1.5 py-0.5 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0"
+                        onclick="event.stopPropagation(); testAPISourceSpeed(this, '${apiKey}', false)"
+                        title="测试此API源的速度">⚡</button>
+            </div>
         `;
         normaldiv.appendChild(checkbox);
 
@@ -139,6 +147,9 @@ function addAdultAPI() {
             if (!api.adult) return; // 仅添加成人内容API
 
             const checked = selectedAPIs.includes(apiKey);
+            
+            // 获取缓存的测速结果
+            const cachedSpeed = apiSpeedCache[apiKey];
 
             const checkbox = document.createElement('div');
             checkbox.className = 'flex items-center justify-between group api-checkbox-item';
@@ -150,10 +161,12 @@ function addAdultAPI() {
                            data-api="${apiKey}">
                     <label for="api_${apiKey}" class="ml-1 text-xs text-pink-400 truncate">${api.name}</label>
                 </div>
-                <button class="api-speed-test-btn text-xs px-1.5 py-0.5 bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0"
-                        onclick="event.stopPropagation(); testAPISourceSpeed(this, '${apiKey}', false)"
-                        title="测试此API源的速度">⚡</button>
-                <span class="api-speed-text text-xs ml-1 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0"></span>
+                <div class="flex items-center gap-1">
+                    ${cachedSpeed ? `<span class="speed-indicator ${getSpeedClass(cachedSpeed.speed)}" title="${cachedSpeed.speed}ms">${formatSpeedBadge(cachedSpeed.speed)}</span>` : ''}
+                    <button class="api-speed-test-btn text-xs px-1.5 py-0.5 bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0"
+                            onclick="event.stopPropagation(); testAPISourceSpeed(this, '${apiKey}', false)"
+                            title="测试此API源的速度">⚡</button>
+                </div>
             `;
             adultdiv.appendChild(checkbox);
 
@@ -230,12 +243,17 @@ function renderCustomAPIsList() {
 
     container.innerHTML = '';
     customAPIs.forEach((api, index) => {
+        const apiKey = 'custom_' + index;
         const apiItem = document.createElement('div');
         apiItem.className = 'flex items-center justify-between p-1 mb-1 bg-[#222] rounded group api-checkbox-item';
         const textColorClass = api.isAdult ? 'text-pink-400' : 'text-white';
         const adultTag = api.isAdult ? '<span class="text-xs text-pink-400 mr-1">(18+)</span>' : '';
         // 新增 detail 地址显示
         const detailLine = api.detail ? `<div class="text-xs text-gray-400 truncate">detail: ${api.detail}</div>` : '';
+        
+        // 获取缓存的测速结果
+        const cachedSpeed = apiSpeedCache[apiKey];
+        
         apiItem.innerHTML = `
             <div class="flex items-center flex-1 min-w-0">
                 <input type="checkbox" id="custom_api_${index}" 
@@ -251,10 +269,10 @@ function renderCustomAPIsList() {
                 </div>
             </div>
             <div class="flex items-center gap-1">
+                ${cachedSpeed ? `<span class="speed-indicator ${getSpeedClass(cachedSpeed.speed)}" title="${cachedSpeed.speed}ms">${formatSpeedBadge(cachedSpeed.speed)}</span>` : ''}
                 <button class="api-speed-test-btn text-xs px-1.5 py-0.5 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                         onclick="event.stopPropagation(); testAPISourceSpeed(this, 'custom_${index}', true)"
                         title="测试此API源的速度">⚡</button>
-                <span class="api-speed-text text-xs opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0"></span>
                 <button class="text-blue-500 hover:text-blue-700 text-xs px-1 flex-shrink-0" onclick="editCustomApi(${index})">✎</button>
                 <button class="text-red-500 hover:text-red-700 text-xs px-1 flex-shrink-0" onclick="removeCustomApi(${index})">✕</button>
             </div>
@@ -1494,12 +1512,7 @@ async function testAPISourceSpeed(btn, apiKey, isCustom) {
     btn.disabled = true;
     const originalText = btn.textContent;
     btn.textContent = '⏳';
-    
-    const speedText = btn.nextElementSibling;
-    if (speedText) {
-        speedText.textContent = '测试中...';
-        speedText.style.opacity = '1';
-    }
+    btn.style.opacity = '1';
     
     try {
         let apiUrl = '';
@@ -1542,6 +1555,13 @@ async function testAPISourceSpeed(btn, apiKey, isCustom) {
         const endTime = Date.now();
         const totalTime = endTime - startTime;
         
+        // 保存测速结果到缓存
+        apiSpeedCache[apiKey] = {
+            speed: totalTime,
+            timestamp: Date.now()
+        };
+        localStorage.setItem('apiSpeedCache', JSON.stringify(apiSpeedCache));
+        
         // 根据速度判断等级
         let speedClass = 'good';
         let speedLabel = '极快';
@@ -1555,43 +1575,25 @@ async function testAPISourceSpeed(btn, apiKey, isCustom) {
         
         // 更新按钮外观
         btn.textContent = '✓';
-        btn.classList.remove('opacity-0', 'group-hover:opacity-100');
-        btn.classList.add('opacity-100');
-        
-        // 更新速度文本显示
-        if (speedText) {
-            speedText.textContent = `${totalTime}ms`;
-            speedText.className = `api-speed-text text-xs opacity-100 transition-opacity flex-shrink-0 ${
-                speedClass === 'good' ? 'text-green-400' :
-                speedClass === 'medium' ? 'text-yellow-400' :
-                'text-red-400'
-            }`;
-        }
+        btn.style.opacity = '1';
         
         showToast(`✓ ${apiName} 速度: ${totalTime}ms - ${speedLabel}`, 'success');
+        
+        // 刷新API列表显示，以更新速度指示器
+        initAPICheckboxes();
+        renderCustomAPIsList();
         
         // 3秒后恢复原始状态
         setTimeout(() => {
             btn.disabled = false;
             btn.textContent = originalText;
-            btn.classList.remove('opacity-100');
-            btn.classList.add('opacity-0', 'group-hover:opacity-100');
-            if (speedText) {
-                speedText.textContent = '';
-                speedText.className = 'api-speed-text text-xs opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0';
-            }
+            btn.style.opacity = '';
         }, 3000);
         
     } catch (error) {
         console.error('API测速失败:', error);
         btn.textContent = '❌';
-        btn.classList.remove('opacity-0', 'group-hover:opacity-100');
-        btn.classList.add('opacity-100');
-        
-        if (speedText) {
-            speedText.textContent = '超时';
-            speedText.className = 'api-speed-text text-xs opacity-100 transition-opacity flex-shrink-0 text-red-400';
-        }
+        btn.style.opacity = '1';
         
         showToast('测速超时或API无响应，请检查地址', 'error');
         
@@ -1599,14 +1601,140 @@ async function testAPISourceSpeed(btn, apiKey, isCustom) {
         setTimeout(() => {
             btn.disabled = false;
             btn.textContent = originalText;
-            btn.classList.remove('opacity-100');
-            btn.classList.add('opacity-0', 'group-hover:opacity-100');
-            if (speedText) {
-                speedText.textContent = '';
-                speedText.className = 'api-speed-text text-xs opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 flex-shrink-0';
-            }
+            btn.style.opacity = '';
         }, 3000);
     }
 }
 
 // 移除Node.js的require语句，因为这是在浏览器环境中运行的
+
+// ========== 新增测速辅助函数 ==========
+
+// 根据速度获取CSS类名
+function getSpeedClass(speed) {
+    if (speed < 1500) {
+        return 'speed-good';
+    } else if (speed < 3000) {
+        return 'speed-medium';
+    } else {
+        return 'speed-poor';
+    }
+}
+
+// 格式化速度徽章显示
+function formatSpeedBadge(speed) {
+    if (speed < 1500) {
+        return `🟢 ${speed}ms`;
+    } else if (speed < 3000) {
+        return `🟡 ${speed}ms`;
+    } else {
+        return `🔴 ${speed}ms`;
+    }
+}
+
+// 批量测速所有已选择的API
+async function batchTestAllAPIs() {
+    const btn = document.getElementById('batchTestBtn');
+    if (!btn || btn.disabled) return;
+    
+    // 收集所有内置API
+    let apisToTest = [];
+    
+    // 收集内置API
+    Object.keys(API_SITES).forEach(apiKey => {
+        apisToTest.push({ key: apiKey, name: API_SITES[apiKey].name, isCustom: false });
+    });
+    
+    // 收集自定义API
+    customAPIs.forEach((api, index) => {
+        apisToTest.push({ key: 'custom_' + index, name: api.name, isCustom: true });
+    });
+    
+    if (apisToTest.length === 0) {
+        showToast('没有可测试的API', 'warning');
+        return;
+    }
+    
+    btn.disabled = true;
+    const originalText = document.getElementById('batchTestText').textContent;
+    document.getElementById('batchTestText').textContent = `测试中... 0/${apisToTest.length}`;
+    
+    let completed = 0;
+    
+    // 顺序测试各API（避免并发导致的网络压力）
+    for (let i = 0; i < apisToTest.length; i++) {
+        const api = apisToTest[i];
+        
+        try {
+            let apiUrl = '';
+            
+            if (api.isCustom) {
+                const customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]');
+                const index = parseInt(api.key.replace('custom_', ''));
+                if (customAPIs[index]) {
+                    apiUrl = customAPIs[index].url;
+                }
+            } else {
+                if (API_SITES[api.key]) {
+                    apiUrl = API_SITES[api.key].api;
+                }
+            }
+            
+            if (!apiUrl) continue;
+            
+            // 执行测速
+            const testKeyword = '测试';
+            const testUrl = `${apiUrl}?ac=videolist&t=${encodeURIComponent(testKeyword)}`;
+            
+            const startTime = Date.now();
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            try {
+                await fetch(testUrl, {
+                    signal: controller.signal,
+                    mode: 'no-cors'
+                });
+                
+                clearTimeout(timeoutId);
+                const endTime = Date.now();
+                const totalTime = endTime - startTime;
+                
+                // 保存结果到缓存
+                apiSpeedCache[api.key] = {
+                    speed: totalTime,
+                    timestamp: Date.now()
+                };
+            } catch (e) {
+                clearTimeout(timeoutId);
+                // 测速失败，标记为超时
+                apiSpeedCache[api.key] = {
+                    speed: -1,
+                    timestamp: Date.now()
+                };
+            }
+        } catch (error) {
+            console.error(`测速失败 ${api.name}:`, error);
+            apiSpeedCache[api.key] = {
+                speed: -1,
+                timestamp: Date.now()
+            };
+        }
+        
+        completed++;
+        document.getElementById('batchTestText').textContent = `测试中... ${completed}/${apisToTest.length}`;
+    }
+    
+    // 保存所有结果
+    localStorage.setItem('apiSpeedCache', JSON.stringify(apiSpeedCache));
+    
+    // 刷新UI
+    initAPICheckboxes();
+    renderCustomAPIsList();
+    
+    // 恢复按钮
+    btn.disabled = false;
+    document.getElementById('batchTestText').textContent = originalText;
+    
+    showToast(`✓ 批量测速完成！已测试 ${completed} 个资源源`, 'success');
+}
