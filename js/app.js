@@ -368,14 +368,14 @@ function restoreAddCustomApiButtons() {
 // 更新选中的API列表
 function updateSelectedAPIs() {
     // 获取所有内置API复选框
-    const builtInApiCheckboxes = document.querySelectorAll('#apiCheckboxes input:checked');
+    const builtInApiCheckboxes = document.querySelectorAll('#apiCheckboxes input[type="checkbox"]:checked');
 
     // 获取选中的内置API
-    const builtInApis = Array.from(builtInApiCheckboxes).map(input => input.dataset.api);
+    const builtInApis = Array.from(builtInApiCheckboxes).map(input => input.dataset.api).filter(Boolean);
 
     // 获取选中的自定义API
-    const customApiCheckboxes = document.querySelectorAll('#customApisList input:checked');
-    const customApiIndices = Array.from(customApiCheckboxes).map(input => 'custom_' + input.dataset.customIndex);
+    const customApiCheckboxes = document.querySelectorAll('#customApisList input[type="checkbox"]:checked');
+    const customApiIndices = Array.from(customApiCheckboxes).map(input => 'custom_' + input.dataset.customIndex).filter(Boolean);
 
     // 合并内置和自定义API
     selectedAPIs = [...builtInApis, ...customApiIndices];
@@ -401,9 +401,19 @@ function selectAllAPIs(selectAll = true, excludeAdult = false) {
 
     checkboxes.forEach(checkbox => {
         if (excludeAdult && checkbox.classList.contains('api-adult')) {
-            checkbox.checked = false;
+            if (checkbox.checked !== false) {
+                checkbox.checked = false;
+                // Trigger change event to ensure proper handling
+                const event = new Event('change', { bubbles: true });
+                checkbox.dispatchEvent(event);
+            }
         } else {
-            checkbox.checked = selectAll;
+            if (checkbox.checked !== selectAll) {
+                checkbox.checked = selectAll;
+                // Trigger change event to ensure proper handling
+                const event = new Event('change', { bubbles: true });
+                checkbox.dispatchEvent(event);
+            }
         }
     });
 
@@ -1633,6 +1643,8 @@ async function testAPISourceSpeed(btn, apiKey, isCustom) {
         showToast(`✓ ${apiName} 速度: ${totalTime}ms - ${speedLabel}`, 'success');
         
         // 刷新API列表显示，以更新速度指示器
+        // Note: We need to preserve the selected state of checkboxes
+        const previousSelections = selectedAPIs;
         initAPICheckboxes();
         renderCustomAPIsList();
         
