@@ -406,21 +406,6 @@ function fetchDoubanTags() {
         });
 }
 
-// 为豆瓣图片生成带鉴权的代理URL
-async function getAuthenticatedProxyUrl(originalUrl) {
-    try {
-        const proxiedUrl = PROXY_URL + encodeURIComponent(originalUrl);
-        // 添加鉴权参数到代理URL
-        if (window.ProxyAuth?.addAuthToProxyUrl) {
-            return await window.ProxyAuth.addAuthToProxyUrl(proxiedUrl);
-        }
-        return proxiedUrl;
-    } catch (error) {
-        console.error('生成代理URL失败:', error);
-        return PROXY_URL + encodeURIComponent(originalUrl);
-    }
-}
-
 // 渲染热门推荐内容
 function renderRecommend(tag, pageLimit, pageStart) {
     const container = document.getElementById("douban-results");
@@ -442,8 +427,8 @@ function renderRecommend(tag, pageLimit, pageStart) {
     
     // 使用通用请求函数
     fetchDoubanData(target)
-        .then(async (data) => {
-            await renderDoubanCards(data, container);
+        .then(data => {
+            renderDoubanCards(data, container);
         })
         .catch(error => {
             console.error("获取豆瓣数据失败：", error);
@@ -515,7 +500,7 @@ async function fetchDoubanData(url) {
 }
 
 // 抽取渲染豆瓣卡片的逻辑到单独函数
-async function renderDoubanCards(data, container) {
+function renderDoubanCards(data, container) {
     // 创建文档片段以提高性能
     const fragment = document.createDocumentFragment();
     
@@ -528,13 +513,8 @@ async function renderDoubanCards(data, container) {
         `;
         fragment.appendChild(emptyEl);
     } else {
-        // 并行生成所有图片的代理URL
-        const proxiedUrls = await Promise.all(
-            data.subjects.map(item => getAuthenticatedProxyUrl(item.cover))
-        );
-        
         // 循环创建每个影视卡片
-        data.subjects.forEach((item, index) => {
+        data.subjects.forEach(item => {
             const card = document.createElement("div");
             card.className = "bg-[#111] hover:bg-[#222] transition-all duration-300 rounded-lg overflow-hidden flex flex-col transform hover:scale-105 shadow-md hover:shadow-lg";
             
@@ -548,14 +528,15 @@ async function renderDoubanCards(data, container) {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
             
-            // 使用已生成的代理URL
-            const proxiedCoverUrl = proxiedUrls[index];
+            // 处理图片URL - 先尝试直接访问（豆瓣通常允许带正确referer的访问）
+            const originalCoverUrl = item.cover;
             
             // 为不同设备优化卡片布局
             card.innerHTML = `
                 <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
-                    <img src="${proxiedCoverUrl}" alt="${safeTitle}" 
+                    <img src="${originalCoverUrl}" alt="${safeTitle}" 
                         class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                        onerror="this.onerror=null; this.src='${PROXY_URL + encodeURIComponent(originalCoverUrl)}'; this.classList.add('object-contain');"
                         loading="lazy" referrerpolicy="no-referrer">
                     <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
                     <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
